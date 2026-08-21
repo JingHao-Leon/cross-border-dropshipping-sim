@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>模拟交易系统 · Agent Team</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#10182B; --panel:#1C2942; --panel2:#182238; --line:#3D4E73;
+    --primary:#4EA8FF; --accent:#FFB347; --mint:#5CE0B8; --red:#FF6B6B;
+    --text:#F2F5FA; --sub:#9AA7C4;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:"PingFang SC","Microsoft YaHei",sans-serif;font-size:13px;min-height:100vh;}
+  .mono{font-family:"Press Start 2P",monospace;}
+  header{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:2px solid var(--line);flex-wrap:wrap;}
+  header h1{font-size:18px;font-weight:800;letter-spacing:2px;}
+  header .clock{font-size:12px;color:var(--accent);}
+  .btn{background:var(--panel);color:var(--text);border:2px solid var(--line);padding:6px 14px;font-size:13px;cursor:pointer;font-family:inherit;}
+  .btn:hover{border-color:var(--primary);}
+  .btn.go{border-color:var(--mint);color:var(--mint);}
+  .btn.stop{border-color:var(--red);color:var(--red);}
+  select,input{background:var(--panel);border:2px solid var(--line);color:var(--text);padding:5px 8px;font-family:inherit;font-size:12px;}
+  .controls{display:flex;gap:8px;align-items:center;margin-left:auto;flex-wrap:wrap;}
+  .metrics{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;padding:14px 20px;}
+  .metric{background:var(--panel);border:2px solid var(--line);padding:10px 12px;}
+  .metric .v{font-size:20px;font-weight:800;margin-top:4px;}
+  .metric .l{font-size:11px;color:var(--sub);}
+  main{display:grid;grid-template-columns:1fr 380px;gap:14px;padding:0 20px 14px;}
+  .col{display:flex;flex-direction:column;gap:14px;}
+  .card{background:var(--panel);border:2px solid var(--line);}
+  .card>h2{font-size:13px;padding:8px 12px;border-bottom:2px solid var(--line);color:var(--sub);font-weight:700;letter-spacing:1px;}
+  .agents{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;padding:12px;}
+  .agent{background:var(--panel2);border:2px solid var(--line);padding:10px;text-align:center;}
+  .agent .dot{display:inline-block;width:8px;height:8px;margin-right:6px;}
+  .agent .nm{font-weight:700;font-size:14px;}
+  .agent .st{font-size:11px;color:var(--sub);margin-top:6px;min-height:28px;}
+  .agent .done{font-size:11px;color:var(--mint);margin-top:4px;}
+  .buyers{display:flex;gap:8px;padding:0 12px 12px;flex-wrap:wrap;}
+  .buyer{background:var(--panel2);border:2px solid var(--line);padding:6px 10px;font-size:12px;}
+  .buyer b{color:var(--primary);}
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  th{color:var(--accent);font-size:11px;text-align:left;background:var(--panel2);}
+  th,td{padding:6px 8px;border:1px solid var(--line);}
+  td.st-DELIVERED{color:var(--mint);} td.st-REFUNDED,td.st-CANCELLED{color:var(--red);}
+  td.st-PRODUCING,td.st-REFUND_REQUESTED{color:var(--accent);}
+  .log{padding:8px 12px;height:560px;overflow-y:auto;font-size:12px;line-height:1.8;}
+  .log .t{color:var(--sub);font-size:10px;margin-right:6px;font-family:Menlo,monospace;}
+  .log .who{display:inline-block;min-width:34px;font-weight:700;}
+  .log .warn{color:var(--accent);} .log .error{color:var(--red);}
+  .stock{display:flex;gap:8px;padding:0 12px 12px;flex-wrap:wrap;}
+  .sku{background:var(--panel2);border:2px solid var(--line);padding:6px 10px;font-size:11px;}
+  .sku.low{border-color:var(--red);color:var(--red);}
+  .mapbg{height:120px;background:url('/static/map.png') center/cover;border:2px solid var(--line);margin:0 20px;position:relative;}
+  .mapbg::after{content:'';position:absolute;inset:0;background:rgba(16,24,43,.55);}
+  .mapbg span{position:absolute;left:14px;bottom:10px;z-index:1;font-size:11px;color:var(--sub);letter-spacing:2px;}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🕹 模拟交易系统</h1>
+  <span class="clock mono" id="clock">DAY 1 00:00</span>
+  <span id="runstate" style="font-size:11px;color:var(--sub)">● 已暂停</span>
+  <div class="controls">
+    <select id="speed">
+      <option value="1">慢速 1x</option>
+      <option value="0.5" selected>中速 2x</option>
+      <option value="0.2">快速 5x</option>
+      <option value="0.1">极速 10x</option>
+    </select>
+    <button class="btn go" onclick="ctl('start')">▶ 启动</button>
+    <button class="btn stop" onclick="ctl('pause')">⏸ 暂停</button>
+    <button class="btn" onclick="ctl('reset')">↺ 重置</button>
+    <span style="color:var(--line)">|</span>
+    <select id="mo-sku"></select>
+    <select id="mo-method"><option value="air">空运</option><option value="sea">海运</option></select>
+    <button class="btn" onclick="manualOrder()">+ 手动下单</button>
+  </div>
+</header>
+
+<div class="metrics" id="metrics"></div>
+<div class="mapbg"><span>CROSS-BORDER PIXEL MAP · LIVE SIMULATION</span></div>
+
+<main style="margin-top:14px;">
+  <div class="col">
+    <div class="card">
+      <h2>AGENT TEAM · 实时状态</h2>
+      <div class="agents" id="agents"></div>
+      <div class="buyers" id="buyers"></div>
+    </div>
+    <div class="card">
+      <h2>最新订单（前 15 笔）</h2>
+      <table>
+        <thead><tr><th>订单号</th><th>买家</th><th>商品</th><th>金额</th><th>方式</th><th>状态</th><th>备注</th></tr></thead>
+        <tbody id="orders"></tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h2>工厂库存</h2>
+      <div class="stock" id="stock"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>事件流</h2>
+    <div class="log" id="log"></div>
+  </div>
+</main>
+
+<script>
+const STATUS_FLOW = ["PAID","FORWARDED","ACCEPTED","PRODUCING","QC","PACKED","SHIPPED","LINEHAUL","CUSTOMS","LAST_MILE","DELIVERED"];
+
+function fmtClock(d){ return `DAY ${d.day} ${String(d.hour).padStart(2,'0')}:00`; }
+
+async function ctl(action){
+  await fetch('/api/control',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({action, speed: parseFloat(document.getElementById('speed').value)})});
+  refresh();
+}
+
+async function manualOrder(){
+  const sku = document.getElementById('mo-sku').value;
+  const method = document.getElementById('mo-method').value;
+  await fetch('/api/order',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({sku, qty:1, method})});
+  refresh();
+}
+
+function render(d){
+  document.getElementById('clock').textContent = fmtClock(d);
+  const rs = document.getElementById('runstate');
+  rs.textContent = d.running ? '● 运行中' : '● 已暂停';
+  rs.style.color = d.running ? 'var(--mint)' : 'var(--sub)';
+
+  const m = d.metrics;
+  const tiles = [
+    ['总订单', m.total_orders], ['进行中', m.active], ['已签收', m.delivered],
+    ['营收 $', m.revenue.toFixed(0)], ['准时率', m.on_time_rate + '%'],
+    ['平均时效', m.avg_hours + 'h'], ['退款', m.refunded], ['缺货取消', m.cancelled],
+  ];
+  document.getElementById('metrics').innerHTML = tiles.map(([l,v],i)=>
+    `<div class="metric"><div class="l">${l}</div><div class="v" style="color:${i>=6?'var(--red)':i==3?'var(--accent)':'var(--text)'}">${v}</div></div>`).join('');
+
+  const busyColor = a => a.busy_with ? 'var(--mint)' : 'var(--line)';
+  document.getElementById('agents').innerHTML = d.agents.map(a=>`
+    <div class="agent">
+      <div class="nm"><span class="dot" style="background:${busyColor(a)}"></span>${a.cn}</div>
+      <div class="st">${a.busy_with ? '正在处理 ' + a.busy_with : '空闲待单'}${a.queue !== undefined ? `<br>队列 ${a.queue}${a.capacity ? ' / 产能 ' + a.capacity : ''}` : ''}</div>
+      <div class="done">已完成 ${a.done}</div>
+    </div>`).join('');
+
+  document.getElementById('buyers').innerHTML = d.buyers.map(b=>
+    `<div class="buyer">🧑 ${b.name}（${b.country}）进行中 <b>${b.active}</b></div>`).join('');
+
+  document.getElementById('orders').innerHTML = d.orders.map(o=>`
+    <tr><td>${o.id}</td><td>${o.buyer}·${o.country}</td><td>${o.sku_name} x${o.qty}</td>
+    <td>$${o.amount}</td><td>${o.method==='air'?'空运':'海运'}</td>
+    <td class="st-${o.status}">${o.status_cn}</td><td style="color:var(--sub)">${o.note||''}</td></tr>`).join('');
+
+  document.getElementById('stock').innerHTML = Object.entries(d.stock).map(([id,s])=>
+    `<div class="sku ${s.left<10?'low':''}">${s.name} · 剩 ${s.left}</div>`).join('');
+
+  document.getElementById('log').innerHTML = d.events.map(e=>`
+    <div class="${e.level}"><span class="t">D${Math.floor(e.t/24)+1} ${String(e.t%24).padStart(2,'0')}:00</span><span class="who">${e.who}</span>${e.msg}</div>`).join('');
+}
+
+let skuLoaded = false;
+async function refresh(){
+  try{
+    const d = await (await fetch('/api/state')).json();
+    if(!skuLoaded){
+      document.getElementById('mo-sku').innerHTML = Object.entries(d.stock).map(([id,s])=>`<option value="${id}">${s.name}</option>`).join('');
+      skuLoaded = true;
+    }
+    render(d);
+  }catch(e){}
+}
+refresh();
+setInterval(refresh, 1000);
+</script>
+</body>
+</html>
